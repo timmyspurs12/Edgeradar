@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #0d0f10;
+  color: #f1f0eb;
+  font-feature-settings: "tnum" 1;
+}
+
+::selection {
+  background: #c8f135;
+  color: #0d0f10;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #292e31 transparent;
+}
+
+/* signature corner mark for panels */
+.corner {
+  position: relative;
+}
+.corner::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid #c8f135;
+  border-left: 1px solid #c8f135;
+  opacity: 0.85;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.25s ease-out both; }
+
+details.why > summary { list-style: none; cursor: pointer; }
+details.why > summary::-webkit-details-marker { display: none; }

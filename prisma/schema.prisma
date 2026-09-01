@@ -1,0 +1,241 @@
+// EdgeRadar production database schema (PostgreSQL + Prisma).
+// The demo build runs on the in-memory provider; connect DATABASE_URL and run
+// `prisma migrate dev` to move to persistent storage without app changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  settings  Json?
+}
+
+model League {
+  id                   String   @id
+  name                 String
+  country              String
+  tier                 Int
+  broadcastStatus      String   // BROADCAST_VERIFIED | PUBLIC_COVERAGE_VERIFIED | LIMITED_DATA
+  officialSite         String?
+  dataQuality          String
+  historicalMatchCount Int      @default(0)
+  seasonStatus         String?
+  hasCornerData        Boolean  @default(false)
+  hasCardData          Boolean  @default(false)
+  hasOddsFeed          Boolean  @default(false)
+  teams                Team[]
+  fixtures             Fixture[]
+  broadcastInfo        BroadcastInformation[]
+  leagueStatistics     LeagueStatistics[]
+}
+
+model Team {
+  id           String  @id
+  leagueId     String
+  name         String
+  shortName    String?
+  league       League  @relation(fields: [leagueId], references: [id])
+  homeFixtures Fixture[] @relation("home")
+  awayFixtures Fixture[] @relation("away")
+  statistics   TeamStatistics[]
+  injuries     Injury[]
+  lineups      Lineup[]
+}
+
+model Fixture {
+  id           String   @id
+  leagueId     String
+  homeTeamId   String
+  awayTeamId   String
+  kickoff      DateTime
+  status       String   // UPCOMING | LIVE | FINISHED
+  league       League   @relation(fields: [leagueId], references: [id])
+  homeTeam     Team     @relation("home", fields: [homeTeamId], references: [id])
+  awayTeam     Team     @relation("away", fields: [awayTeamId], references: [id])
+  matchStats   MatchStatistics?
+  predictions  Prediction[]
+  odds         Odds[]
+  lineups      Lineup[]
+
+  @@index([kickoff])
+  @@index([leagueId, status])
+}
+
+model HistoricalMatch {
+  id         String   @id
+  leagueId   String
+  homeTeamId String
+  awayTeamId String
+  date       DateTime
+  homeGoals  Int
+  awayGoals  Int
+  homeGoals1H Int
+  awayGoals1H Int
+  corners    Int?
+  cards      Int?
+
+  @@index([leagueId, date])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+}
+
+model TeamStatistics {
+  id        String   @id @default(cuid())
+  teamId    String
+  window    String   // LAST5 | LAST10 | SEASON | HOME | AWAY
+  payload   Json
+  updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId, window])
+}
+
+model LeagueStatistics {
+  id        String   @id @default(cuid())
+  leagueId  String
+  payload   Json     // baselines: goals, O/U rates, BTTS, halves, corners, cards
+  updatedAt DateTime @updatedAt
+  league    League   @relation(fields: [leagueId], references: [id])
+}
+
+model MatchStatistics {
+  fixtureId  String  @id
+  homeGoals  Int
+  awayGoals  Int
+  homeGoals1H Int
+  awayGoals1H Int
+  corners    Int?
+  cards      Int?
+  fixture    Fixture @relation(fields: [fixtureId], references: [id])
+}
+
+model Prediction {
+  id             String   @id @default(cuid())
+  fixtureId      String
+  marketCode     String
+  probability    Float
+  edgeScore      Float
+  confidenceTier String
+  generatedAt    DateTime
+  lockedAt       DateTime?
+  modelVersionId String
+  fixture        Fixture      @relation(fields: [fixtureId], references: [id])
+  modelVersion   ModelVersion @relation(fields: [modelVersionId], references: [id])
+  snapshot       PredictionSnapshot?
+  result         PredictionResult?
+
+  @@index([fixtureId])
+  @@index([generatedAt])
+}
+
+// Immutable pre-match snapshot: everything the model saw at generation time.
+model PredictionSnapshot {
+  predictionId String     @id
+  createdAt    DateTime   @default(now())
+  locked       Boolean    @default(false)
+  inputs       Json       // frozen stats, sample sizes, component breakdown
+  dataSources  Json       // provider ids + lastUpdated timestamps
+  oddsUsed     Json?
+  injuriesUsed Json?
+  lineupStatus String?
+  prediction   Prediction @relation(fields: [predictionId], references: [id])
+}
+
+model PredictionResult {
+  predictionId String     @id
+  outcome      String     // WIN | LOSS | VOID
+  settledAt    DateTime
+  prediction   Prediction @relation(fields: [predictionId], references: [id])
+}
+
+model ModelVersion {
+  id          String       @id
+  label       String       // e.g. "EdgeRadar v1.0"
+  description String?
+  weights     Json
+  createdAt   DateTime     @default(now())
+  predictions Prediction[]
+}
+
+model DataSource {
+  id          String   @id
+  name        String
+  kind        String   // fixtures | statistics | odds | injuries | broadcast
+  mode        String   // DEMO | LIVE
+  lastUpdated DateTime
+  status      String   // LIVE | RECENT | STALE
+  notes       String?
+}
+
+model BroadcastInformation {
+  id        String  @id @default(cuid())
+  leagueId  String
+  broadcaster String
+  territory String?
+  evidenceUrl String?
+  verifiedAt DateTime?
+  league    League  @relation(fields: [leagueId], references: [id])
+}
+
+model Injury {
+  id        String   @id @default(cuid())
+  teamId    String
+  player    String
+  status    String
+  reportedAt DateTime
+  source    String
+  team      Team     @relation(fields: [teamId], references: [id])
+}
+
+model Lineup {
+  id         String   @id @default(cuid())
+  fixtureId  String
+  teamId     String
+  announcedAt DateTime
+  players    Json
+  fixture    Fixture  @relation(fields: [fixtureId], references: [id])
+  team       Team     @relation(fields: [teamId], references: [id])
+}
+
+model Odds {
+  id         String   @id @default(cuid())
+  fixtureId  String
+  marketCode String
+  decimal    Float
+  bookmaker  String
+  capturedAt DateTime
+  fixture    Fixture  @relation(fields: [fixtureId], references: [id])
+
+  @@index([fixtureId, marketCode])
+}
+
+model PredictionPerformance {
+  id        String   @id @default(cuid())
+  scope     String   // GLOBAL | LEAGUE:<id> | MARKET:<code> | TIER:<tier>
+  period    String
+  total     Int
+  wins      Int
+  hitRate   Float
+  avgProb   Float
+  roi       Float?
+  updatedAt DateTime @updatedAt
+}
+
+model MarketStatistics {
+  id         String   @id @default(cuid())
+  leagueId   String
+  marketCode String
+  rate       Float
+  sample     Int
+  updatedAt  DateTime @updatedAt
+
+  @@unique([leagueId, marketCode])
+}
