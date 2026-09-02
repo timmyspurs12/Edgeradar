@@ -87,7 +87,7 @@ function saveCache() {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function fdoFetch(pathname: string): Promise<any> {
-  const key = process.env.FOOTBALL_DATA_API_KEY;
+  const key = (process.env.FOOTBALL_DATA_API_KEY || "").trim().replace(/^["']|["']$/g, "");
   if (!key) throw new Error("FOOTBALL_DATA_API_KEY is not set — cannot use the football-data.org provider.");
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(`${BASE}${pathname}`, {
@@ -99,7 +99,9 @@ async function fdoFetch(pathname: string): Promise<any> {
       await sleep(61000);
       continue;
     }
-    if (res.status === 403) throw Object.assign(new Error(`403 for ${pathname}`), { code: 403 });
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`football-data.org Authentication Failed (HTTP ${res.status}): Check that FOOTBALL_DATA_API_KEY is valid.`);
+    }
     if (!res.ok) throw new Error(`football-data.org ${res.status} for ${pathname}`);
     return res.json();
   }
@@ -313,6 +315,8 @@ function buildMapped(cache: DiskCache): Mapped {
 
 // ── provider implementation ────────────────────────────────────────────────
 export const footballDataProvider: FootballDataProvider = {
+  id: "football-data",
+  name: "football-data.org (v4)",
   mode: "LIVE",
   async getLeagues() { return (await mapAll()).leagues; },
   async getTeams(leagueId?: string) {

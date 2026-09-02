@@ -13,6 +13,9 @@ import {
 
 export interface AppData {
   mode: "DEMO" | "LIVE";
+  providerId: string;
+  providerName: string;
+  replay?: boolean;
   builtAt: string;
   leagues: League[];
   teams: Team[];
@@ -147,7 +150,10 @@ export async function getAppData(): Promise<AppData> {
   });
 
   cached = {
-    mode: provider.mode, builtAt: new Date(now).toISOString(),
+    mode: provider.mode,
+    providerId: provider.id,
+    providerName: provider.name,
+    builtAt: new Date(now).toISOString(),
     leagues, teams, fixtures, ctx, predictions, resolved, radar,
   };
   cachedKey = key;

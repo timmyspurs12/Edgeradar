@@ -175,7 +175,7 @@ export default async function ModelPage() {
       <p className="mt-4 font-mono text-[10px] text-mut">
         {data.mode === "DEMO"
           ? "All performance figures derive from resolved predictions on synthetic DEMO fixtures. They demonstrate the tracking machinery — they are not evidence of real-world performance."
-          : "Performance figures derive from resolved pre-match predictions on live fixtures (football-data.org). Sample sizes grow daily; treat small buckets with caution."}
+          : `Performance figures derive from resolved pre-match predictions on live fixtures (${data.providerName}). Sample sizes grow daily; treat small buckets with caution.`}
       </p>
     </div>
   );

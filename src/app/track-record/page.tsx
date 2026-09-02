@@ -26,7 +26,7 @@ export default async function TrackRecord() {
       <h1 className="text-xl font-semibold tracking-tight" style={{ fontStretch: "120%" }}>PREDICTION TRACK RECORD</h1>
       <p className="text-[12px] text-sec mt-0.5">
         Every published pre-match pick, resolved against the final result after the whistle.
-        Original snapshots are never rewritten.{data.mode === "DEMO" ? " All entries are DEMO DATA." : " Live data: football-data.org."}
+        Original snapshots are never rewritten.{data.mode === "DEMO" ? " All entries are DEMO DATA." : ` Live data: ${data.providerName}.`}
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-4">

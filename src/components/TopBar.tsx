@@ -4,9 +4,12 @@ import { APP_TZ_LABEL } from "@/lib/format";
 
 export function TopBar() {
   let mode: "DEMO" | "LIVE" = "DEMO";
+  let providerName = "Demo Provider";
   let modeError = false;
   try {
-    mode = getProvider().mode;
+    const p = getProvider();
+    mode = p.mode;
+    providerName = p.name;
   } catch {
     modeError = true;
   }
@@ -41,7 +44,7 @@ export function TopBar() {
         <span className="hidden md:inline font-mono text-[10px] text-mut whitespace-nowrap">
           {mode === "DEMO"
             ? `synthetic dataset — no live provider · times in ${APP_TZ_LABEL}`
-            : `football-data.org · times in ${APP_TZ_LABEL}`}
+            : `${providerName} · times in ${APP_TZ_LABEL}`}
         </span>
       </div>
     </header>

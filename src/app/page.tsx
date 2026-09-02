@@ -15,19 +15,20 @@ export default async function Dashboard() {
   const now = Date.now();
   const todayKey = dayKeyInTz(new Date());
 
-  const upcoming = data.fixtures.filter((f) => f.status === "UPCOMING");
-  const today = upcoming.filter((f) => dayKeyInTz(f.kickoff) === todayKey);
+  const upcoming = data.fixtures.filter((f) => f.status === "UPCOMING" || f.status === "LIVE");
+  const today = data.fixtures.filter((f) => dayKeyInTz(f.kickoff) === todayKey);
   const next3d = upcoming.filter((f) => new Date(f.kickoff).getTime() <= now + 3 * 86400000);
 
-  const preds = (list: typeof upcoming) => list.map((f) => ({ f, p: data.predictions.get(f.id)! }));
+  const preds = (list: typeof today) => list.map((f) => ({ f, p: data.predictions.get(f.id)! }));
   const todayP = preds(today);
-  const analyzed = todayP.filter(({ p }) => p.markets.length > 0);
-  const veryHigh = todayP.filter(({ p }) => p.matchConfidence >= 85).length;
-  const high = todayP.filter(({ p }) => p.matchConfidence >= 80 && p.matchConfidence < 85).length;
-  const weak = todayP.filter(({ p }) => p.noStrongEdge).length;
+  const analyzed = todayP.filter(({ p }) => p && p.markets.length > 0);
+  const veryHigh = todayP.filter(({ p }) => p && p.matchConfidence >= 85).length;
+  const high = todayP.filter(({ p }) => p && p.matchConfidence >= 80 && p.matchConfidence < 85).length;
+  const weak = todayP.filter(({ p }) => !p || p.noStrongEdge).length;
 
-  const topEdges = preds(next3d)
-    .filter(({ p }) => p.headline)
+  const topEdges = next3d
+    .map((f) => ({ f, p: data.predictions.get(f.id)! }))
+    .filter(({ p }) => p && p.headline)
     .sort((a, b) => (b.p.headline!.edgeScore - a.p.headline!.edgeScore))
     .slice(0, 10);
 
@@ -149,7 +150,7 @@ export default async function Dashboard() {
       <p className="mt-6 font-mono text-[10px] text-mut">
         {data.mode === "DEMO"
           ? <>All fixtures, statistics and odds on this screen are DEMO DATA (synthetic, seeded). </>
-          : <>Football data provided by the football-data.org API. </>}
+          : <>Football data provided by {data.providerName}. </>}
         Prediction snapshots are generated strictly pre-match: {fmtDateTime(data.builtAt)} ({APP_TZ_LABEL}).
       </p>
     </div>

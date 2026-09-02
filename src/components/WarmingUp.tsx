@@ -15,9 +15,8 @@ export function WarmingUp({ loaded, total }: { loaded: number; total: number }) 
         <Panel corner className="p-6">
           <div className="font-mono text-[11px] tracking-widest text-acc">LIVE DATA WARM-UP</div>
           <p className="text-[13px] text-sec mt-2 leading-relaxed">
-            Fetching live competitions from football-data.org. The free tier allows
-            10 requests/minute, so the first load takes about 1–3 minutes. This page
-            refreshes automatically — no action needed.
+            Fetching live competitions from the configured data provider. Free tier APIs are rate-limited,
+            so the first load can take 1–2 minutes. This page refreshes automatically — no action needed.
           </p>
           <div className="mt-4 flex items-center gap-3">
             <div className="h-[6px] flex-1 bg-surface2 rounded-sm overflow-hidden border border-edge/60">

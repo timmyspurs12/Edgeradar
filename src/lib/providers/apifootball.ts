@@ -108,17 +108,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let dailyQuotaExhausted = false;
 
 async function afFetch(pathname: string): Promise<any> {
-  const key = process.env.APIFOOTBALL_KEY;
+  const key = (process.env.APIFOOTBALL_KEY || "").trim().replace(/^["']|["']$/g, "");
   if (!key) throw new Error("APIFOOTBALL_KEY is not set — cannot use the API-Football provider.");
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(`${BASE}${pathname}`, {
-      headers: { "x-apisports-key": key },
+      headers: {
+        "x-apisports-key": key,
+        "x-rapidapi-key": key,
+        "x-rapidapi-host": "v3.football.api-sports.io",
+      },
       cache: "no-store",
     });
     if (res.status === 429) {
       console.warn(`[af] 429 rate-limited on ${pathname} — waiting 61s`);
       await sleep(61000);
       continue;
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`API-Football Authentication Failed (HTTP ${res.status}): Please check that APIFOOTBALL_KEY is valid.`);
     }
     if (!res.ok) throw new Error(`API-Football HTTP ${res.status} for ${pathname}`);
     const body = await res.json();
@@ -167,7 +174,8 @@ async function fetchLeague(id: number): Promise<LeagueCache> {
   // Try preferred season; on plan/season errors walk back (free keys only
   // serve older seasons). Never fabricate — just use what the plan allows.
   let lastErr: any = null;
-  for (const season of [preferred, preferred - 1, preferred - 2, preferred - 3]) {
+  const seasonsToTry = [preferred, preferred - 1, preferred - 2, preferred - 3, preferred - 4, preferred - 5];
+  for (const season of seasonsToTry) {
     try {
       const body = await afFetch(`/fixtures?league=${id}&season=${season}`);
       const fixtures = (body.response ?? []).map(trimFx).filter(Boolean) as RawFx[];
@@ -458,6 +466,8 @@ function buildMapped(cache: DiskCache, ids: number[]): Mapped {
 
 // ── provider implementation ─────────────────────────────────────────────────
 export const apiFootballProvider: FootballDataProvider = {
+  id: "api-football",
+  name: "API-Football (api-sports.io v3)",
   mode: "LIVE",
   async getLeagues() { return (await mapAll()).leagues; },
   async getTeams(leagueId?: string) {

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   { href: "/", label: "Dashboard", code: "DSH" },
+  { href: "/two-odds", label: "2.00 Banker", code: "2OD" },
   { href: "/matches", label: "Matches", code: "MTC" },
   { href: "/leagues", label: "Leagues", code: "LGE" },
   { href: "/radar", label: "League Radar", code: "RDR" },
@@ -16,10 +17,10 @@ const ITEMS = [
 
 const MOBILE = [
   { href: "/", label: "Radar" },
+  { href: "/two-odds", label: "2.00 Odds" },
   { href: "/matches", label: "Matches" },
   { href: "/leagues", label: "Leagues" },
   { href: "/track-record", label: "Record" },
-  { href: "/model", label: "Model" },
 ];
 
 export function Nav() {

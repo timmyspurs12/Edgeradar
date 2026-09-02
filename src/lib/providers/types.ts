@@ -55,6 +55,8 @@ export interface DataSourceMeta {
 
 export interface FootballDataProvider
   extends LeaguesProvider, FixturesProvider, StatisticsProvider, InjuryProvider, OddsProvider, BroadcastProvider {
+  readonly id: "demo" | "football-data" | "api-football" | string;
+  readonly name: string;
   readonly mode: "DEMO" | "LIVE";
   getSources(): Promise<DataSourceMeta[]>;
 }

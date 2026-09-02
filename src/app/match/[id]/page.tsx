@@ -86,7 +86,7 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
           {data.mode === "DEMO" ? (
             <span className="text-warn">DEMO DATA</span>
           ) : (
-            <span className="text-acc">LIVE DATA · football-data.org</span>
+            <span className="text-acc">LIVE DATA · {data.providerName}</span>
           )}
         </div>
       </Panel>
@@ -271,7 +271,7 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
       <p className="mt-6 font-mono text-[10px] text-mut">
         {data.mode === "DEMO"
           ? "Probabilistic estimates from synthetic DEMO DATA — not guarantees, not betting advice."
-          : "Probabilistic estimates — not guarantees, not betting advice. Football data provided by the football-data.org API."}
+          : `Probabilistic estimates — not guarantees, not betting advice. Football data provided by ${data.providerName}.`}
       </p>
     </div>
   );

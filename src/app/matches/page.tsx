@@ -38,11 +38,11 @@ export default async function Matches({
   let list = data.fixtures.filter((f) => {
     const ko = new Date(f.kickoff).getTime();
     if (range === "finished") return f.status === "FINISHED";
-    if (f.status === "FINISHED") return false;
     if (range === "today") return dayKeyInTz(f.kickoff) === todayKey;
     if (range === "tomorrow") return dayKeyInTz(f.kickoff) === tomorrowKey;
-    if (range === "3d") return ko <= now + 3 * 86400000;
-    if (range === "7d") return ko <= now + 7 * 86400000;
+    if (f.status === "FINISHED") return false;
+    if (range === "3d") return ko >= now - 3600000 && ko <= now + 3 * 86400000;
+    if (range === "7d") return ko >= now - 3600000 && ko <= now + 7 * 86400000;
     return true;
   });
 

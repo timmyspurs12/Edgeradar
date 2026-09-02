@@ -1,20 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { TopBar } from "@/components/TopBar";
-
-const archivo = Archivo({
-  subsets: ["latin"],
-  variable: "--font-archivo",
-  axes: ["wdth"],
-});
-
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
-});
 
 export const metadata: Metadata = {
   title: "EdgeRadar — Pre-Match Football Intelligence",
@@ -28,7 +15,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
+    <html lang="en">
       <body className="font-sans antialiased min-h-screen bg-ink text-fg">
         <div className="flex min-h-screen">
           <Nav />
@@ -40,8 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <footer className="px-4 md:px-6 py-4 border-t border-edge text-[11px] text-mut leading-relaxed pb-24 md:pb-4">
               EdgeRadar provides statistical probabilities, not guaranteed outcomes. Football
               remains inherently unpredictable. Past performance does not guarantee future
-              results. Nothing here is betting advice. When live mode is active, football data
-              is provided by the football-data.org API. Kickoff times are shown in Africa/Lagos (WAT).
+              results. Nothing here is betting advice. Live data is fetched through the active provider
+              abstraction layer (API-Football / football-data.org). Kickoff times are shown in Africa/Lagos (WAT).
             </footer>
           </div>
         </div>
