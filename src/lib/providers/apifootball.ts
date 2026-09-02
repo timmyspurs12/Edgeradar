@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Fixture, HistoricalMatch, League, LeagueTier, Team } from "../types";
 import { DataSourceMeta, FootballDataProvider, WarmingUpError } from "./types";
+import { getLiveBookmakerOdds } from "./sportybet";
 
 /**
  * LIVE PROVIDER — API-Football (api-sports.io, v3)
@@ -452,7 +453,7 @@ function buildMapped(cache: DiskCache, ids: number[]): Mapped {
         : `Season ${lc.season} (live feed)`,
       hasCornerData: cornerSamples >= 20,
       hasCardData: cardSamples >= 20,
-      hasOddsFeed: false, // odds enrichment lands with the Pro upgrade
+      hasOddsFeed: true,
       avgGoals: finishedCount ? Math.round((goalsSum / finishedCount) * 100) / 100 : 0,
     });
   }
@@ -477,7 +478,19 @@ export const apiFootballProvider: FootballDataProvider = {
   async getFixtures() { return (await mapAll()).fixtures; },
   async getHistoricalMatches() { return (await mapAll()).historical; },
   async getInjuryNote() { return null; },  // not wired yet — never fabricated
-  async getOdds() { return null; },        // odds enrichment arrives with Pro plan
+  async getOdds(fixtureId: string, marketCode: string) {
+    try {
+      const data = await mapAll();
+      const fx = data.fixtures.find((f) => f.id === fixtureId);
+      if (!fx) return null;
+      const home = data.teams.find((t) => t.id === fx.homeId);
+      const away = data.teams.find((t) => t.id === fx.awayId);
+      if (!home || !away) return null;
+      return await getLiveBookmakerOdds(home.name, away.name, marketCode);
+    } catch {
+      return null;
+    }
+  },
   async getBroadcastEvidence(leagueId: string) {
     const lg = (await mapAll()).leagues.find((l) => l.id === leagueId);
     return lg?.broadcastEvidence ?? null;
@@ -493,7 +506,7 @@ export const apiFootballProvider: FootballDataProvider = {
     return [
       { id: "af-fixtures", name: "API-Football — Fixtures & Results", kind: "fixtures", mode: "LIVE", lastUpdated: last, status, notes: `api-sports.io v3, ${leagueIds().length} configured leagues.${replayNote}` },
       { id: "af-stats", name: "API-Football — Corners & Cards", kind: "statistics", mode: "LIVE", lastUpdated: last, status: STATS_BUDGET > 0 ? status : "STALE", notes: STATS_BUDGET > 0 ? `Per-fixture statistics enrichment, budget ${STATS_BUDGET} requests/cycle, permanent cache.` : "Disabled (APIFOOTBALL_STATS_BUDGET=0) to protect the free 100 req/day quota. Corner/Card radars show 'Data unavailable'." },
-      { id: "odds", name: "Odds Feed", kind: "odds", mode: "LIVE", lastUpdated: last, status: "STALE", notes: "Not wired yet — API-Football pre-match odds only exist for current-season fixtures (Pro plan). VALUE category disabled rather than estimated." },
+      { id: "odds", name: "SportyBet / Football.com — Odds Feed", kind: "odds", mode: "LIVE", lastUpdated: last, status: "LIVE", notes: "Real decimal market odds from SportyBet & Football.com bookmaker feeds." },
       { id: "injuries", name: "Injury Feed", kind: "injuries", mode: "LIVE", lastUpdated: last, status: "STALE", notes: "Not wired yet. UI shows 'Data unavailable' — never fabricated." },
       { id: "broadcast", name: "Broadcast Metadata", kind: "broadcast", mode: "LIVE", lastUpdated: last, status: "RECENT", notes: "Curated editorial metadata for configured competitions." },
     ];

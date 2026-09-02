@@ -22,6 +22,8 @@ const CACHE_DIR = process.env.VERCEL || process.env.NETLIFY || process.env.AWS_L
 const CACHE_FILE = path.join(CACHE_DIR, "sofascore-cache.json");
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes TTL
 
+import { getLiveBookmakerOdds } from "./sportybet";
+
 // Curated top global tournaments (SofaScore uniqueTournament IDs)
 const TOP_TOURNAMENTS: Record<number, { name: string; country: string; tier: LeagueTier; site: string }> = {
   17: { name: "Premier League", country: "England", tier: 1, site: "premierleague.com" },
@@ -373,7 +375,7 @@ function buildMapped(cache: SofaDiskCache): MappedData {
         seasonStatus: "2024/2025/2026 Live Season",
         hasCornerData: false,
         hasCardData: false,
-        hasOddsFeed: false,
+        hasOddsFeed: true,
         avgGoals: 2.75,
       });
     }
@@ -421,8 +423,18 @@ export const sofaScoreProvider: FootballDataProvider = {
   async getInjuryNote() {
     return null;
   },
-  async getOdds() {
-    return null;
+  async getOdds(fixtureId: string, marketCode: string) {
+    try {
+      const data = await mapAll();
+      const fx = data.fixtures.find((f) => f.id === fixtureId);
+      if (!fx) return null;
+      const home = data.teams.find((t) => t.id === fx.homeId);
+      const away = data.teams.find((t) => t.id === fx.awayId);
+      if (!home || !away) return null;
+      return await getLiveBookmakerOdds(home.name, away.name, marketCode);
+    } catch {
+      return null;
+    }
   },
   async getBroadcastEvidence(leagueId: string) {
     const lg = (await mapAll()).leagues.find((l) => l.id === leagueId);
@@ -449,6 +461,15 @@ export const sofaScoreProvider: FootballDataProvider = {
         lastUpdated: last,
         status: "LIVE",
         notes: "Exact half-time splits and full-time scores powering statistical goal engines.",
+      },
+      {
+        id: "sporty-odds",
+        name: "SportyBet / Football.com — Live Bookmaker Odds Feed",
+        kind: "odds",
+        mode: "LIVE",
+        lastUpdated: last,
+        status: "LIVE",
+        notes: "Live decimal market odds (1X2, Over/Under lines, GG/NG, Double Chance) from SportyBet & Football.com.",
       },
       {
         id: "broadcast",

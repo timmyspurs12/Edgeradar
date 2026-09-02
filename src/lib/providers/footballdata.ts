@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Fixture, HistoricalMatch, League, LeagueTier, Team } from "../types";
 import { DataSourceMeta, FootballDataProvider, WarmingUpError } from "./types";
+import { getLiveBookmakerOdds } from "./sportybet";
 
 /**
  * LIVE PROVIDER — football-data.org (v4)
@@ -300,7 +301,7 @@ function buildMapped(cache: DiskCache): Mapped {
       dataQuality: finished.length >= 150 ? "EXCELLENT" : finished.length >= 60 ? "GOOD" : finished.length >= 20 ? "FAIR" : "LIMITED",
       historicalMatchCount: finished.length,
       seasonStatus: `Season ${entry.seasonLabel} (live feed)`,
-      hasCornerData: false, hasCardData: false, hasOddsFeed: false,
+      hasCornerData: false, hasCardData: false, hasOddsFeed: true,
       avgGoals: Math.round(avgGoals * 100) / 100,
     });
   }
@@ -326,7 +327,19 @@ export const footballDataProvider: FootballDataProvider = {
   async getFixtures() { return (await mapAll()).fixtures; },
   async getHistoricalMatches() { return (await mapAll()).historical; },
   async getInjuryNote() { return null; },       // not available on this tier — never fabricated
-  async getOdds() { return null; },             // no legal odds feed configured — VALUE category disabled
+  async getOdds(fixtureId: string, marketCode: string) {
+    try {
+      const data = await mapAll();
+      const fx = data.fixtures.find((f) => f.id === fixtureId);
+      if (!fx) return null;
+      const home = data.teams.find((t) => t.id === fx.homeId);
+      const away = data.teams.find((t) => t.id === fx.awayId);
+      if (!home || !away) return null;
+      return await getLiveBookmakerOdds(home.name, away.name, marketCode);
+    } catch {
+      return null;
+    }
+  },
   async getBroadcastEvidence(leagueId: string) {
     const lg = (await mapAll()).leagues.find((l) => l.id === leagueId);
     return lg?.broadcastEvidence ?? null;
