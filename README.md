@@ -17,7 +17,7 @@ npm run dev        # http://localhost:3000
 Verify a change the way CI does:
 
 ```bash
-npm test           # 142 Vitest unit tests
+npm test           # 161 Vitest unit tests
 npm run lint       # next lint (ESLint)
 npm run typecheck  # tsc --noEmit
 npm run build      # production build
@@ -255,7 +255,7 @@ odds or injuries — those stay `null`. Matches with no published time default t
 
 ## Testing
 
-`npm test` runs 142 Vitest unit tests (`vitest.config.ts`, `tests/`):
+`npm test` runs 161 Vitest unit tests (`vitest.config.ts`, `tests/`):
 
 | File | Covers |
 | --- | --- |
@@ -263,6 +263,7 @@ odds or injuries — those stay `null`. Matches with no published time default t
 | `tests/repository.test.ts` | `queryFixtures` filtering — today/tomorrow in WAT, status × range, live matches never dropped, lock state, sorting |
 | `tests/providers.test.ts` | `DATA_PROVIDER` switching, aliases, auto-detect order, `ProviderConfigError` for every missing key |
 | `tests/customapi.test.ts` | Custom API contract: status mapping, kickoff normalization, odds provenance, endpoint fallback, auth headers |
+| `tests/openfootball.test.ts` | Score parsing, status inference, season keys, timezone conversion, keyless LIVE behaviour |
 | `tests/banker.test.ts` | Market whitelist, anti-correlation rules, odds target, eligibility floors, odds provenance |
 | `tests/service.test.ts` | Kickoff locking, pre-match integrity assertion, zero silent mocking, UTC intake |
 

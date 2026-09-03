@@ -123,7 +123,7 @@ function slug(s: string): string {
 
 /** `"4-2"`, `"4-2 (1-0)"` or `{ ft, ht }` → `{ hg, ag, hg1, ag1 }`. */
 export function parseScore(
-  score: OpenFootballMatch["score"],
+  score: OpenFootballMatch["score"] | null,
 ): { hg: number; ag: number; hg1: number | null; ag1: number | null } | null {
   if (score === null || score === undefined) return null;
   let ftRaw = "";
