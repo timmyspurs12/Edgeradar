@@ -6,6 +6,7 @@ import { Panel, SectionTitle, TierBadge } from "@/components/ui";
 import { MatchRow } from "@/components/MatchRow";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function Dashboard() {
   const res = await tryGetAppData();

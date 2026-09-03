@@ -6,6 +6,7 @@ import { areCorrelated } from "@/lib/markets";
 import { MarketGroup } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 const Body = z.object({
   legs: z.number().int().min(2).max(6),

@@ -9,6 +9,7 @@ import { MarketGroup } from "@/lib/types";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 const RADARS: [string, MarketGroup[]][] = [
   ["GOAL RADAR", ["TOTAL_GOALS"]],

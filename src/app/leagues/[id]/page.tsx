@@ -6,6 +6,7 @@ import { BroadcastBadge, Panel, ProbBar, QualityBadge, SectionTitle } from "@/co
 import { MatchRow } from "@/components/MatchRow";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function LeagueRadarPage({ params }: { params: { id: string } }) {
   const res = await tryGetAppData();

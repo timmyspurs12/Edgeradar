@@ -3,6 +3,7 @@ import { getAppData } from "@/lib/service";
 import { WarmingUpError } from "@/lib/providers/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 /** GET /api/predictions/[id] — full pre-match prediction snapshot for a fixture. */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {

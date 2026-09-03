@@ -5,6 +5,7 @@ import { Panel, SectionTitle } from "@/components/ui";
 import { WarmingUp } from "@/components/WarmingUp";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function SourcesPage() {
   const provider = getProvider();

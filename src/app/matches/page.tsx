@@ -6,6 +6,7 @@ import { MatchRow } from "@/components/MatchRow";
 import { Panel } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 const RANGES = [
   ["today", "Today"], ["tomorrow", "Tomorrow"], ["3d", "Next 3 Days"], ["7d", "Next 7 Days"], ["all", "All Upcoming"], ["finished", "Finished"],

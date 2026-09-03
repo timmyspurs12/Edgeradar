@@ -72,10 +72,51 @@ recent alignment (12%) + data quality (10%).
 
 ## Connecting live data
 
-1. Implement `FootballDataProvider` (see `src/lib/providers/types.ts`).
-2. Register it in `src/lib/providers/index.ts`; set `DATA_PROVIDER=live`.
-3. Keys are server-side env vars only (`.env.example`) — never shipped to the browser.
-4. Point `DATABASE_URL` at PostgreSQL and run `npx prisma migrate dev`.
+Two live providers ship built-in. Add a key to `.env.local` and restart — no code
+changes. Auto-selection priority: **API-Football → football-data.org → demo**.
+Force a specific one with `DATA_PROVIDER=api-football | football-data | demo`.
+Demo and live data are never mixed.
+
+### Option A — API-Football (api-sports.io)
+
+Free key: <https://dashboard.api-football.com> → `APIFOOTBALL_KEY=...` in `.env.local`.
+
+**Free plan ($0, 100 requests/day, no card):** all endpoints and 1,100+ leagues,
+but *only past seasons* — the current season is Pro-only. EdgeRadar handles this
+honestly with **REPLAY mode**: it auto-detects an old season, shifts its calendar
+onto today's timeline, and replays it walk-forward — fixtures shown as UPCOMING are
+real historical matches whose results are hidden from the engine until their
+virtual kickoff passes. Every page is labeled REPLAY; it is a full end-to-end test
+of the live pipeline with real data, not real upcoming fixtures.
+
+**Pro plan ($19/mo, 7,500 req/day, prepaid, no auto-renewal):** current season
+unlocks and REPLAY mode switches itself off — genuine upcoming fixtures, zero code
+change. Raise `APIFOOTBALL_STATS_BUDGET` (e.g. 50–100) to enrich corners/cards via
+per-fixture statistics (each fixture fetched once, cached permanently).
+
+Quota math (free): 14 leagues × 1 request per refresh cycle, TTL 360 min
+(`APIFOOTBALL_TTL_MINUTES`) ≈ 56 req/day — safely inside 100/day. Daily quota
+resets 00:00 UTC. Knobs: `APIFOOTBALL_LEAGUES` (CSV of league IDs),
+`APIFOOTBALL_SEASON`, `APIFOOTBALL_REPLAY=0` to disable replay.
+
+Odds and injuries are deliberately not wired (not available to free keys); the
+VALUE category stays disabled rather than estimated.
+
+### Option B — football-data.org
+
+Free key: <https://www.football-data.org/client/register> →
+`FOOTBALL_DATA_API_KEY=...`. Real current-season fixtures for 10 competitions
+(PL, La Liga, Serie A, Bundesliga, Ligue 1, UCL, Eredivisie, Primeira, Brasileirão,
+Championship). No corners/cards/odds on the free tier.
+
+### General
+
+- Keys are server-side env vars only (`.env.example`) — never shipped to the browser.
+- Optionally point `DATABASE_URL` at PostgreSQL and run `npx prisma migrate dev`.
+- Local mocks for offline testing: `node scripts/mock-fdo.js` (football-data v4 on
+  :4400, use `FDO_BASE_URL`) and `node scripts/mock-apifootball.js` (API-Football v3
+  on :4500, simulates free-plan season lock — use `APIFOOTBALL_BASE_URL=http://localhost:4500`
+  with any `APIFOOTBALL_KEY`).
 
 ## Disclaimer
 

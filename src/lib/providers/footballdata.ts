@@ -22,7 +22,7 @@ import { DataSourceMeta, FootballDataProvider, WarmingUpError } from "./types";
  * starts after a restart don't refetch.
  */
 
-const BASE = "https://api.football-data.org/v4";
+const BASE = process.env.FDO_BASE_URL || "https://api.football-data.org/v4";
 // Serverless hosts (Vercel/Netlify/Lambda) have a read-only project dir — use /tmp there.
 const CACHE_DIR = process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME
   ? "/tmp"
