@@ -14,19 +14,32 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (e instanceof WarmingUpError) {
       return NextResponse.json({ warming: true, loaded: e.loaded, total: e.total }, { status: 503 });
     }
-    throw e;
+    const err = e as Error;
+    return NextResponse.json(
+      { error: err?.name ?? "PROVIDER_ERROR", message: err?.message ?? "Unknown provider failure." },
+      { status: 502 },
+    );
   }
   const fx = data.fixtures.find((f) => f.id === params.id);
   if (!fx) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
   const pred = data.predictions.get(fx.id);
+  const locked = pred?.lockedAt !== null && pred?.lockedAt !== undefined;
   return NextResponse.json({
     mode: data.mode,
+    providerId: data.providerId,
     fixture: {
       id: fx.id, kickoff: fx.kickoff, status: fx.status,
       home: data.teams.find((t) => t.id === fx.homeId)?.name,
       away: data.teams.find((t) => t.id === fx.awayId)?.name,
+      league: data.leagues.find((l) => l.id === fx.leagueId)?.name,
     },
     prediction: pred ?? null,
-    note: "Snapshot is generated pre-match and locked at kickoff. DEMO DATA.",
+    lockedAtKickoff: locked,
+    note:
+      "Snapshot is generated strictly pre-match (generatedAt < kickoff) and locks at kickoff. " +
+      (locked
+        ? `Locked at ${pred!.lockedAt}; never recomputed from in-play or post-match data.`
+        : "Not yet locked — kickoff is still ahead.") +
+      (data.mode === "DEMO" ? " DEMO DATA." : ` LIVE data via ${data.providerId}.`),
   });
 }

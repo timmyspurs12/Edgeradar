@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { tryGetAppData } from "@/lib/service";
+import { loadAppData } from "@/lib/service";
 import { WarmingUp } from "@/components/WarmingUp";
+import { ProviderFailure } from "@/components/ProviderFailure";
 import { Panel, SectionTitle } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function RadarPage() {
-  const res = await tryGetAppData();
-  if (res.warming) return <WarmingUp loaded={res.loaded} total={res.total} />;
+  const res = await loadAppData();
+  if (res.state === "warming") return <WarmingUp loaded={res.loaded} total={res.total} />;
+  if (res.state === "error") return <ProviderFailure error={res.error} />;
   const data = res.data;
   const rows = data.radar
     .map((r) => ({ r, lg: data.leagues.find((l) => l.id === r.leagueId)! }))

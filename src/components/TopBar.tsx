@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { getProvider } from "@/lib/providers";
+import { resolveProvider } from "@/lib/providers";
 import { APP_TZ_LABEL } from "@/lib/format";
 
 export function TopBar() {
   let mode: "DEMO" | "LIVE" = "DEMO";
+  let providerName = "";
   let modeError = false;
   try {
-    mode = getProvider().mode;
+    const resolved = resolveProvider();
+    mode = resolved.provider.mode;
+    providerName = resolved.provider.name;
   } catch {
     modeError = true;
   }
@@ -39,9 +42,11 @@ export function TopBar() {
           </span>
         )}
         <span className="hidden md:inline font-mono text-[10px] text-mut whitespace-nowrap">
-          {mode === "DEMO"
-            ? `synthetic dataset — no live provider · times in ${APP_TZ_LABEL}`
-            : `football-data.org · times in ${APP_TZ_LABEL}`}
+          {modeError
+            ? `check DATA_PROVIDER · times in ${APP_TZ_LABEL}`
+            : mode === "DEMO"
+              ? `synthetic dataset — no live provider · times in ${APP_TZ_LABEL}`
+              : `${providerName} · times in ${APP_TZ_LABEL}`}
         </span>
       </div>
     </header>

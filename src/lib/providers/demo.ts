@@ -269,6 +269,8 @@ function simulate(rng: () => number, seed: LeagueSeed, home: Team, away: Team) {
 
 // ── provider implementation ────────────────────────────────────────────────
 export const demoProvider: FootballDataProvider = {
+  id: "demo",
+  name: "Synthetic Demo Dataset (seeded)",
   mode: "DEMO",
   async getLeagues() { return buildDemoDataset().leagues; },
   async getTeams(leagueId?: string) {

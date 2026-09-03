@@ -1,23 +1,30 @@
 import { ConfidenceTier } from "./types";
+import {
+  DEFAULT_DISPLAY_TZ, dayKeyInTz as dayKeyInTzImpl, displayTz, tzAbbreviation, toUtcIso,
+} from "./time";
 
 // All timestamps render in the app display timezone (configurable via DISPLAY_TZ).
-export const APP_TZ = process.env.DISPLAY_TZ || "Africa/Lagos";
-export const APP_TZ_LABEL = APP_TZ === "Africa/Lagos" ? "WAT" : APP_TZ;
+// Timezone maths lives in ./time — this file only formats.
+export const APP_TZ = displayTz();
+export const APP_TZ_LABEL = tzAbbreviation(APP_TZ);
+export { DEFAULT_DISPLAY_TZ };
 
-export const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: APP_TZ });
+/** Re-exported so callers keep one import surface; implementation is in ./time. */
+export const dayKeyInTz = (d: Date | string, tz: string = APP_TZ) => dayKeyInTzImpl(d, tz);
 
-export const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", timeZone: APP_TZ });
+/** Re-exported: kickoffs are always normalized to UTC before they are stored. */
+export const normalizeKickoff = (d: Date | string | number) => toUtcIso(d);
 
-export const fmtDateTime = (iso: string) => `${fmtDate(iso)} · ${fmtTime(iso)}`;
+export const fmtTime = (iso: string, tz: string = APP_TZ) =>
+  new Date(toUtcIso(iso)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
 
-// Day-key in display TZ (used to group "today's" fixtures the way the user sees them).
-export const dayKeyInTz = (d: Date | string) =>
-  new Date(d).toLocaleDateString("en-CA", { timeZone: APP_TZ }); // YYYY-MM-DD
+export const fmtDate = (iso: string, tz: string = APP_TZ) =>
+  new Date(toUtcIso(iso)).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", timeZone: tz });
+
+export const fmtDateTime = (iso: string, tz: string = APP_TZ) => `${fmtDate(iso, tz)} · ${fmtTime(iso, tz)}`;
 
 export function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = Date.now() - new Date(toUtcIso(iso)).getTime();
   const min = Math.round(ms / 60000);
   if (min < 1) return "just now";
   if (min < 60) return `${min} min ago`;

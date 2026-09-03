@@ -458,6 +458,8 @@ function buildMapped(cache: DiskCache, ids: number[]): Mapped {
 
 // ── provider implementation ─────────────────────────────────────────────────
 export const apiFootballProvider: FootballDataProvider = {
+  id: "api-football",
+  name: "API-Football (api-sports.io)",
   mode: "LIVE",
   async getLeagues() { return (await mapAll()).leagues; },
   async getTeams(leagueId?: string) {
