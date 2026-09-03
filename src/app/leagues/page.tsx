@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { tryGetAppData } from "@/lib/service";
+import { loadAppData } from "@/lib/service";
 import { WarmingUp } from "@/components/WarmingUp";
+import { ProviderFailure } from "@/components/ProviderFailure";
 import { BroadcastBadge, Panel, QualityBadge, SectionTitle } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function Leagues() {
-  const res = await tryGetAppData();
-  if (res.warming) return <WarmingUp loaded={res.loaded} total={res.total} />;
+  const res = await loadAppData();
+  if (res.state === "warming") return <WarmingUp loaded={res.loaded} total={res.total} />;
+  if (res.state === "error") return <ProviderFailure error={res.error} />;
   const data = res.data;
   const tiers: [number, string][] = [
     [1, "TIER 1 — MAJOR BROADCAST LEAGUES"],

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { tryGetAppData, modelStats } from "@/lib/service";
+import { loadAppData, modelStats } from "@/lib/service";
 import { WarmingUp } from "@/components/WarmingUp";
+import { ProviderFailure } from "@/components/ProviderFailure";
 import { fmtDateTime } from "@/lib/format";
 import { Panel, SectionTitle, TierBadge } from "@/components/ui";
 
@@ -8,8 +9,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 export default async function TrackRecord() {
-  const res = await tryGetAppData();
-  if (res.warming) return <WarmingUp loaded={res.loaded} total={res.total} />;
+  const res = await loadAppData();
+  if (res.state === "warming") return <WarmingUp loaded={res.loaded} total={res.total} />;
+  if (res.state === "error") return <ProviderFailure error={res.error} />;
   const data = res.data;
   const stats = modelStats(data.resolved);
   const recent = [...data.resolved].sort((a, b) => b.kickoff.localeCompare(a.kickoff)).slice(0, 60);

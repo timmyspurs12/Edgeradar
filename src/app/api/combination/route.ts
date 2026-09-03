@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAppData } from "@/lib/service";
 import { WarmingUpError } from "@/lib/providers/types";
-import { areCorrelated } from "@/lib/markets";
+import { queryFixtures } from "@/lib/repository";
 import { MarketGroup } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -10,25 +10,36 @@ export const maxDuration = 60; // Vercel: allow slow live-data cold starts
 
 const Body = z.object({
   legs: z.number().int().min(2).max(6),
-  minProb: z.number().min(70).max(97),
+  minProb: z.number().min(50).max(99),
   groups: z.array(z.string()).max(12),
   tier: z.number().int().min(0).max(3),
   horizonDays: z.number().int().min(1).max(7).default(3),
+  leagueId: z.string().optional(),
 });
 
+type Cand = {
+  fixtureId: string; leagueId: string; match: string; kickoff: string;
+  marketCode: string; marketLabel: string; group: MarketGroup;
+  probability: number; edgeScore: number; odds: number | null;
+  teams: [string, string];
+};
+
 /**
- * BUILD MY SAFE COMBINATION
- * Correlation-aware accumulator builder:
- *  - max ONE selection per fixture (same-match dependency is never multiplied)
- *  - no two selections from the same correlation cluster involving a shared team
- *  - combined probability = product across distinct matches, with an explicit
- *    league-environment caveat when legs share a league
+ * POST /api/combination — correlation-aware accumulator builder.
+ *
+ * Fixtures come from `queryFixtures` (the single source of truth), so the
+ * builder sees exactly the same upcoming matches as the pages.
+ *
+ * Constraints applied while assembling:
+ *  - at most ONE selection per fixture (same-match dependency is never multiplied)
+ *  - NO shared team across legs (a team's environment drives both of its fixtures)
+ *  - legs are never padded with picks below the requested floor
  */
 export async function POST(req: Request) {
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await req.json());
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
@@ -37,40 +48,42 @@ export async function POST(req: Request) {
     data = await getAppData();
   } catch (e) {
     if (e instanceof WarmingUpError) {
-      return NextResponse.json({ warming: true, loaded: e.loaded, total: e.total }, { status: 503 });
+      return NextResponse.json(
+        { error: "LIVE_WARMUP", message: "Live provider is still filling its cache.", loaded: e.loaded, total: e.total },
+        { status: 503 },
+      );
     }
-    throw e;
+    const err = e as Error;
+    return NextResponse.json(
+      { error: err?.name ?? "PROVIDER_ERROR", message: err?.message ?? "Unknown provider failure." },
+      { status: 502 },
+    );
   }
-  const now = Date.now();
-  const horizon = now + body.horizonDays * 86400000;
 
-  type Cand = {
-    fixtureId: string; leagueId: string; match: string; kickoff: string;
-    marketCode: string; marketLabel: string; group: MarketGroup;
-    probability: number; edgeScore: number; odds: number | null;
-    teams: string[];
-  };
+  const horizonDays = body.horizonDays >= 7 ? 7 : body.horizonDays <= 3 ? 3 : 7;
+  const rows = queryFixtures(data, {
+    range: horizonDays === 3 ? "3d" : "7d",
+    status: "UPCOMING",
+    leagueId: body.leagueId,
+    tier: body.tier,
+    withPrediction: true,
+  });
 
   const pool: Cand[] = [];
-  for (const fx of data.fixtures) {
-    if (fx.status !== "UPCOMING") continue;
-    const ko = new Date(fx.kickoff).getTime();
-    if (ko > horizon) continue;
-    const lg = data.leagues.find((l) => l.id === fx.leagueId)!;
-    if (body.tier && lg.tier !== body.tier) continue;
-    const pred = data.predictions.get(fx.id);
+  for (const row of rows) {
+    const pred = row.prediction;
     if (!pred || pred.noStrongEdge) continue;
-    const home = data.teams.find((t) => t.id === fx.homeId)!;
-    const away = data.teams.find((t) => t.id === fx.awayId)!;
     for (const m of pred.markets) {
       if (m.probability < body.minProb || m.dataStrength === "WEAK") continue;
       if (body.groups.length && !body.groups.includes(m.market.group)) continue;
       pool.push({
-        fixtureId: fx.id, leagueId: fx.leagueId,
-        match: `${home.name} v ${away.name}`, kickoff: fx.kickoff,
+        fixtureId: row.fixture.id,
+        leagueId: row.league.id,
+        match: `${row.homeTeam.name} v ${row.awayTeam.name}`,
+        kickoff: row.kickoffIso,
         marketCode: m.market.code, marketLabel: m.market.label, group: m.market.group,
         probability: m.probability, edgeScore: m.edgeScore, odds: m.odds,
-        teams: [home.name, away.name],
+        teams: [row.homeTeam.id, row.awayTeam.id],
       });
     }
   }
@@ -78,17 +91,26 @@ export async function POST(req: Request) {
   pool.sort((a, b) => b.edgeScore - a.edgeScore || b.probability - a.probability);
 
   const picked: Cand[] = [];
-  const warnings: string[] = [];
+  const usedFixtures = new Set<string>();
+  const usedTeams = new Set<string>();
+  const rejected = { sameFixture: 0, sharedTeam: 0 };
+
   for (const c of pool) {
     if (picked.length >= body.legs) break;
-    if (picked.some((p) => p.fixtureId === c.fixtureId)) continue; // same-match dependency: excluded by design
-    const sharedTeam = picked.find((p) => p.teams.some((t) => c.teams.includes(t)));
-    if (sharedTeam && areCorrelated(sharedTeam.marketCode, c.marketCode)) continue;
+    if (usedFixtures.has(c.fixtureId)) { rejected.sameFixture++; continue; }
+    if (c.teams.some((t) => usedTeams.has(t))) { rejected.sharedTeam++; continue; }
     picked.push(c);
+    usedFixtures.add(c.fixtureId);
+    for (const t of c.teams) usedTeams.add(t);
   }
 
+  const warnings: string[] = [];
   if (picked.length < body.legs) {
-    warnings.push(`Only ${picked.length}/${body.legs} statistically compatible selections met the ≥${body.minProb}% floor. The combination was NOT padded with weaker picks.`);
+    warnings.push(
+      `Only ${picked.length}/${body.legs} statistically compatible selections met the ≥${body.minProb}% floor ` +
+      `(${rejected.sameFixture} rejected for sharing a fixture, ${rejected.sharedTeam} for sharing a team). ` +
+      `The combination was NOT padded with weaker picks.`,
+    );
   }
   const leagueCounts = new Map<string, number>();
   for (const p of picked) leagueCounts.set(p.leagueId, (leagueCounts.get(p.leagueId) ?? 0) + 1);
@@ -104,11 +126,13 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     demo: data.mode === "DEMO",
+    mode: data.mode,
+    providerId: data.providerId,
     legs: picked,
     combinedProbability: picked.length ? Math.round(combinedProb * 1000) / 10 : null,
     combinedOdds: combinedOdds !== null ? Math.round(combinedOdds * 100) / 100 : null,
     independenceNote:
-      "Legs come from distinct fixtures; same-match and same-team correlated selections are excluded before multiplying probabilities.",
+      "Legs come from distinct fixtures with no shared teams; same-match and same-team selections are excluded before probabilities are multiplied.",
     warnings,
   });
 }

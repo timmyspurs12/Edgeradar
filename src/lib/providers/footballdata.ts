@@ -313,6 +313,8 @@ function buildMapped(cache: DiskCache): Mapped {
 
 // ── provider implementation ────────────────────────────────────────────────
 export const footballDataProvider: FootballDataProvider = {
+  id: "football-data",
+  name: "football-data.org",
   mode: "LIVE",
   async getLeagues() { return (await mapAll()).leagues; },
   async getTeams(leagueId?: string) {

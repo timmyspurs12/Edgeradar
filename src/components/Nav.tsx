@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/matches", label: "Matches", code: "MTC" },
   { href: "/leagues", label: "Leagues", code: "LGE" },
   { href: "/radar", label: "League Radar", code: "RDR" },
+  { href: "/two-odds", label: "2.00 Banker", code: "BNK" },
   { href: "/builder", label: "Combination", code: "CMB" },
   { href: "/track-record", label: "Track Record", code: "TRK" },
   { href: "/model", label: "Model", code: "MDL" },
@@ -17,8 +18,8 @@ const ITEMS = [
 const MOBILE = [
   { href: "/", label: "Radar" },
   { href: "/matches", label: "Matches" },
-  { href: "/leagues", label: "Leagues" },
-  { href: "/track-record", label: "Record" },
+  { href: "/two-odds", label: "2.00" },
+  { href: "/builder", label: "Combo" },
   { href: "/model", label: "Model" },
 ];
 

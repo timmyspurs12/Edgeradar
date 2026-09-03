@@ -1,18 +1,39 @@
-import { getProvider } from "./providers";
-import { WarmingUpError } from "./providers/types";
+import { resolveProvider } from "./providers";
+import { ProviderError, WarmingUpError } from "./providers/types";
 import { buildContext, EngineContext, predictFixture, MODEL_VERSION } from "./engine";
 import { evalMarket, MARKETS } from "./markets";
+import { toUtcIso } from "./time";
 import {
   Fixture, League, LeagueRadarStats, MatchPrediction, ResolvedPrediction, Team, TeamForm,
 } from "./types";
 
 /**
- * Application service layer. Pulls data through the provider abstraction,
- * runs the engine, resolves finished predictions, and caches per day.
+ * APPLICATION SERVICE LAYER
+ * -------------------------
+ * Pulls data through the provider abstraction, runs the prediction engine,
+ * locks snapshots at kickoff, resolves finished predictions, and caches the
+ * result for one hour.
+ *
+ * STRICT LIVE DATA INTEGRITY — ZERO SILENT MOCKING
+ *  1. The provider is resolved once, from the environment. If a live provider
+ *     is requested and misconfigured, `ProviderConfigError` propagates to the
+ *     error boundary. There is no `catch` anywhere in this file that swaps in
+ *     the demo dataset.
+ *  2. `mode` on the returned data is the *provider's* mode. A live provider
+ *     that reports `DEMO` is a contract violation and throws.
+ *  3. In LIVE mode an empty payload is an error, not an empty dashboard.
+ *  4. A live provider that is still filling its rate-limited cache throws
+ *     `WarmingUpError`; pages render a progress screen. They do not render
+ *     synthetic numbers while waiting.
+ *  5. Predictions are pre-match artifacts. Once a fixture kicks off its
+ *     snapshot is locked (`lockedAt === kickoff`) and is never recomputed from
+ *     in-play or post-match data.
  */
 
 export interface AppData {
   mode: "DEMO" | "LIVE";
+  /** Which provider produced this data (see src/lib/providers). */
+  providerId: string;
   builtAt: string;
   leagues: League[];
   teams: Team[];
@@ -27,6 +48,8 @@ let cached: AppData | null = null;
 let cachedKey = "";
 
 const HOUR = 3600000;
+/** How long before kickoff a finished/live fixture's snapshot is dated. */
+const PRE_MATCH_LEAD_MS = 5 * HOUR;
 
 /** Result wrapper: pages render a progress screen while a live provider warms
  *  its cache instead of blocking the render for minutes (rate-limited APIs). */
@@ -34,57 +57,135 @@ export type AppResult =
   | { warming: true; loaded: number; total: number }
   | { warming: false; data: AppData };
 
+/** Test/support hook — forces the next `getAppData()` to rebuild. */
+export function resetAppDataCache(): void {
+  cached = null;
+  cachedKey = "";
+}
+
 export async function tryGetAppData(): Promise<AppResult> {
   try {
     return { warming: false, data: await getAppData() };
   } catch (e) {
     if (e instanceof WarmingUpError) return { warming: true, loaded: e.loaded, total: e.total };
-    throw e;
+    throw e; // every other failure reaches the error boundary untouched
+  }
+}
+
+/**
+ * Tri-state loader for pages.
+ *
+ * Pages must render one of exactly three things: real data, a warm-up progress
+ * screen, or an explicit provider-failure panel. Never synthetic data standing
+ * in for a live feed. Catching here (rather than letting the throw escape the
+ * Server Component) keeps the explanation in the server-rendered HTML instead
+ * of an empty 500 shell that only becomes readable after client hydration.
+ */
+export type PageDataResult =
+  | { state: "ok"; data: AppData }
+  | { state: "warming"; loaded: number; total: number }
+  | { state: "error"; error: unknown };
+
+export async function loadAppData(): Promise<PageDataResult> {
+  try {
+    return { state: "ok", data: await getAppData() };
+  } catch (e) {
+    if (e instanceof WarmingUpError) return { state: "warming", loaded: e.loaded, total: e.total };
+    return { state: "error", error: e };
   }
 }
 
 export async function getAppData(): Promise<AppData> {
-  const key = new Date().toISOString().slice(0, 13); // refresh hourly
-  if (cached && cachedKey === key) return refreshStatuses(cached);
+  const key = new Date().toISOString().slice(0, 13); // rebuild hourly
+  if (cached && cachedKey === key) return applyKickoffLock(cached);
 
-  const provider = getProvider();
-  const [leagues, teams, fixtures, hist] = await Promise.all([
-    provider.getLeagues(), provider.getTeams(), provider.getFixtures(), provider.getHistoricalMatches(),
+  const { provider, id: providerId } = resolveProvider();
+  const built = await buildAppData(provider, providerId);
+
+  cached = built;
+  cachedKey = key;
+  return applyKickoffLock(cached);
+}
+
+type ProviderLike = ReturnType<typeof resolveProvider>["provider"];
+
+/**
+ * Builds the whole app snapshot from one provider. Exported for tests: pass any
+ * object shaped like a provider and the integrity rules still apply.
+ */
+export async function buildAppData(provider: ProviderLike, providerId: string = provider.id): Promise<AppData> {
+  const declaredMode = provider.mode;
+
+  // A provider selected as "live" must actually be live. Guards against a
+  // provider implementation silently reporting synthetic data.
+  if (declaredMode === "DEMO" && providerId !== "demo") {
+    throw new ProviderError(
+      `Provider "${providerId}" is registered as a live source but reported mode DEMO. Refusing to serve synthetic data as live.`,
+      providerId, false,
+    );
+  }
+
+  const [leagues, teams, rawFixtures, hist] = await Promise.all([
+    provider.getLeagues(),
+    provider.getTeams(),
+    provider.getFixtures(),
+    provider.getHistoricalMatches(),
   ]);
+
+  // ── intake: normalize every kickoff to UTC exactly once ──────────────────
+  const fixtures: Fixture[] = [];
+  const rejected: string[] = [];
+  for (const fx of rawFixtures) {
+    try {
+      fixtures.push({ ...fx, kickoff: toUtcIso(fx.kickoff) });
+    } catch (e) {
+      rejected.push(`${fx.id}: ${(e as Error).message}`);
+    }
+  }
+
+  if (declaredMode === "LIVE" && fixtures.length === 0) {
+    throw new ProviderError(
+      `Live provider "${providerId}" returned zero usable fixtures${rejected.length ? ` (${rejected.length} rejected, e.g. ${rejected[0]})` : ""}. ` +
+        `Nothing was substituted — fix the upstream feed or set DATA_PROVIDER=demo to opt into synthetic data explicitly.`,
+      providerId,
+    );
+  }
 
   const now = Date.now();
 
   // Prediction timestamp policy:
-  //  UPCOMING → now (capped 60s before kickoff) · FINISHED/LIVE → kickoff − 5h.
+  //  UPCOMING → now (capped 60s before kickoff)
+  //  LIVE/FINISHED → kickoff − 5h, i.e. a snapshot that predates the match.
   const genAt = (fx: Fixture) => {
-    const ko = new Date(fx.kickoff).getTime();
-    if (fx.status === "FINISHED" || ko <= now) return new Date(ko - 5 * HOUR).toISOString();
+    const ko = Date.parse(fx.kickoff);
+    if (fx.status === "FINISHED" || ko <= now) return new Date(ko - PRE_MATCH_LEAD_MS).toISOString();
     return new Date(Math.min(now, ko - 60000)).toISOString();
   };
 
-  // Strict pre-match guarantee with live feeds: a prediction may only see
-  // historical matches dated BEFORE its generation timestamp. Upcoming fixtures
-  // use a "now" context; finished fixtures (track record) get a context cut off
-  // at the earliest generation timestamp of their generation day.
+  // STRICT PRE-MATCH GUARANTEE: a prediction may only ever see historical
+  // matches dated BEFORE its own generation timestamp. Upcoming fixtures use a
+  // "now" context; fixtures that have already kicked off get a context cut off
+  // at the start of their generation day, so same-day and later results —
+  // including the fixture's own — can never leak into the numbers.
   const ctx = buildContext(leagues, teams, hist, new Date(now).toISOString());
   const dayCtx = new Map<string, EngineContext>();
   const ctxFor = (fx: Fixture): EngineContext => {
-    if (fx.status !== "FINISHED" && new Date(fx.kickoff).getTime() > now) return ctx;
+    if (fx.status !== "FINISHED" && Date.parse(fx.kickoff) > now) return ctx;
     const g = genAt(fx);
-    const key = g.slice(0, 10);
-    if (!dayCtx.has(key)) {
-      // cutoff = start of that generation day → never sees same-day or later results
-      dayCtx.set(key, buildContext(leagues, teams, hist, `${key}T00:00:00.000Z`));
+    const dayKey = g.slice(0, 10);
+    if (!dayCtx.has(dayKey)) {
+      dayCtx.set(dayKey, buildContext(leagues, teams, hist, `${dayKey}T00:00:00.000Z`));
     }
-    return dayCtx.get(key)!;
+    return dayCtx.get(dayKey)!;
   };
 
-  // Synchronous odds lookup backed by provider (demo provider is sync inside).
+  // Synchronous odds lookup, preloaded from the provider. A provider with no
+  // odds feed yields null — the engine then reports no value edge rather than
+  // inventing a price.
   const oddsCache = new Map<string, number | null>();
   const preloadOdds = async (fxId: string) => {
     for (const m of MARKETS) {
-      const v = await provider.getOdds(fxId, m.code);
-      oddsCache.set(`${fxId}:${m.code}`, v);
+      oddsCache.set(`${fxId}:${m.code}`, await provider.getOdds(fxId, m.code));
     }
   };
   const oddsLeagues = new Set(leagues.filter((l) => l.hasOddsFeed).map((l) => l.id));
@@ -95,6 +196,8 @@ export async function getAppData(): Promise<AppData> {
   for (const fx of fixtures) {
     predictions.set(fx.id, predictFixture(fx, ctxFor(fx), genAt(fx), oddsLookup));
   }
+
+  assertPreMatchIntegrity(fixtures, predictions);
 
   // ── resolve finished predictions (kept strictly separate from generation) ──
   const resolved: ResolvedPrediction[] = [];
@@ -146,25 +249,56 @@ export async function getAppData(): Promise<AppData> {
     };
   });
 
-  cached = {
-    mode: provider.mode, builtAt: new Date(now).toISOString(),
+  return {
+    mode: declaredMode, providerId, builtAt: new Date(now).toISOString(),
     leagues, teams, fixtures, ctx, predictions, resolved, radar,
   };
-  cachedKey = key;
-  return refreshStatuses(cached);
 }
 
-// Kickoff-time lock: statuses are re-derived on every request so a fixture
-// flips UPCOMING → LIVE at kickoff and its snapshot becomes locked.
-function refreshStatuses(data: AppData): AppData {
-  const now = Date.now();
+/**
+ * Pre-match integrity assertion. Runs on every build so a regression in the
+ * engine's timestamp handling fails loudly instead of publishing a leaked
+ * prediction.
+ */
+export function assertPreMatchIntegrity(
+  fixtures: Fixture[],
+  predictions: Map<string, MatchPrediction>,
+): void {
+  for (const fx of fixtures) {
+    const pred = predictions.get(fx.id);
+    if (!pred) continue;
+    const ko = Date.parse(fx.kickoff);
+    const gen = Date.parse(pred.generatedAt);
+    if (gen >= ko) {
+      throw new ProviderError(
+        `Pre-match integrity violation on ${fx.id}: prediction generated at ${pred.generatedAt} is not before kickoff ${fx.kickoff}.`,
+        "engine", false,
+      );
+    }
+  }
+}
+
+/**
+ * KICKOFF-TIME LOCK.
+ * Re-derived on every request so a fixture flips UPCOMING → LIVE at kickoff and
+ * its prediction snapshot becomes immutable:
+ *   · `lockedAt` is set to the fixture's kickoff timestamp, exactly.
+ *   · `generatedAt` always stays strictly before kickoff.
+ *   · A fixture that has not kicked off is never marked locked.
+ */
+export function applyKickoffLock(data: AppData, now: number = Date.now()): AppData {
   for (const fx of data.fixtures) {
-    const ko = new Date(fx.kickoff).getTime();
+    const ko = Date.parse(fx.kickoff);
     if (fx.status !== "FINISHED") {
       fx.status = ko <= now ? (ko <= now - 2 * HOUR ? "FINISHED" : "LIVE") : "UPCOMING";
     }
     const pred = data.predictions.get(fx.id);
-    if (pred && ko <= now && !pred.lockedAt) pred.lockedAt = fx.kickoff;
+    if (!pred) continue;
+    if (ko <= now) {
+      pred.lockedAt = fx.kickoff; // locked AT kickoff — never after
+    } else {
+      pred.lockedAt = null;
+    }
   }
   return data;
 }

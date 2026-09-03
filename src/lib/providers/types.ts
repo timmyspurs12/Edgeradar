@@ -55,8 +55,48 @@ export interface DataSourceMeta {
 
 export interface FootballDataProvider
   extends LeaguesProvider, FixturesProvider, StatisticsProvider, InjuryProvider, OddsProvider, BroadcastProvider {
+  /** Stable machine id — must match the DATA_PROVIDER value that selects it. */
+  readonly id: ProviderId;
+  readonly name: string;
   readonly mode: "DEMO" | "LIVE";
   getSources(): Promise<DataSourceMeta[]>;
+}
+
+/** Every provider EdgeRadar can be pointed at via `DATA_PROVIDER`. */
+export type ProviderId =
+  | "custom"
+  | "api-football"
+  | "football-data"
+  | "openfootball"
+  | "demo";
+
+/**
+ * A live provider failed. Surfaced verbatim to the error boundary — the app
+ * never substitutes synthetic data for it.
+ */
+export class ProviderError extends Error {
+  readonly providerId: string;
+  readonly retryable: boolean;
+  constructor(message: string, providerId: string, retryable = true) {
+    super(message);
+    this.name = "ProviderError";
+    this.providerId = providerId;
+    this.retryable = retryable;
+  }
+}
+
+/**
+ * The environment asks for a live provider that is not configured. Thrown at
+ * provider-resolution time (before any fetch) so misconfiguration is obvious
+ * in the deploy logs instead of showing up as an empty dashboard.
+ */
+export class ProviderConfigError extends ProviderError {
+  readonly missing: string[];
+  constructor(message: string, providerId: string, missing: string[] = []) {
+    super(message, providerId, false);
+    this.name = "ProviderConfigError";
+    this.missing = missing;
+  }
 }
 
 /** Thrown while a live provider is still warming its cache (rate-limited APIs).

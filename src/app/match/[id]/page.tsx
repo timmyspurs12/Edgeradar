@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { tryGetAppData, teamForm } from "@/lib/service";
+import { loadAppData, teamForm } from "@/lib/service";
 import { WarmingUp } from "@/components/WarmingUp";
+import { ProviderFailure } from "@/components/ProviderFailure";
 import { fmtDateTime, probClass, timeAgo } from "@/lib/format";
 import { BroadcastBadge, FlagChip, Medal, Panel, ProbBar, QualityBadge, SectionTitle, StatusBadge } from "@/components/ui";
 import { EdgeSignal } from "@/components/EdgeSignal";
@@ -23,8 +24,9 @@ const RADARS: [string, MarketGroup[]][] = [
 ];
 
 export default async function MatchPage({ params }: { params: { id: string } }) {
-  const res = await tryGetAppData();
-  if (res.warming) return <WarmingUp loaded={res.loaded} total={res.total} />;
+  const res = await loadAppData();
+  if (res.state === "warming") return <WarmingUp loaded={res.loaded} total={res.total} />;
+  if (res.state === "error") return <ProviderFailure error={res.error} />;
   const data = res.data;
   const fx = data.fixtures.find((f) => f.id === params.id);
   if (!fx) notFound();
